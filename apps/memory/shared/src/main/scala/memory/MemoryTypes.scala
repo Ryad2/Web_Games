@@ -27,8 +27,7 @@ case class MemoryView(
     alreadyMatched: ScoresView
 )
 
-type ScoresView =
-  Map[UserId, Seq[Card]]
+type ScoresView = Map[UserId, Seq[Card]]
 
 enum StateView:
   /** The game is ongoing. */
@@ -71,4 +70,13 @@ enum MemoryEvent:
   /** Flips selected cards. */
   case FlipSelected
 
-type MemoryState = Unit // Change this!
+enum MemoryState : 
+  /** The game is ongoing. */
+  case Playing(phase: PhaseView, currentPlayer: Int, allPlayers : Vector[UserId],  board: Vector[(Card, CardView)], alreadyMatchedScore: ScoresView)
+
+  /** The game is over; there may be more than one winner if two players have
+    * the same score.
+    */
+  case Finished(board: Vector[(Card, CardView)], alreadyMatched: ScoresView)
+  
+
