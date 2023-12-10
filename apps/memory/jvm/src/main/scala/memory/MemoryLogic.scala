@@ -7,6 +7,7 @@ import cs214.webapp.messages.*
 import cs214.webapp.exceptions.*
 import cs214.webapp.server.WebServer
 import memory.*
+import memory.PhaseView.SelectingCards
 
 // Feel free to tweak this value!
 private val SHOW_CARDS_PAUSE_MS = 2500
@@ -69,76 +70,76 @@ object MemoryStateMachine extends cs214.webapp.StateMachine[MemoryEvent, MemoryS
     MemoryState.Playing(PhaseView.SelectingCards, 0, clients.toVector, board, clients.map(client => client -> Seq.empty).toMap)
 
 
-
-
   override def transition(state: MemoryState)(userId: UserId, event: MemoryEvent): Try[Seq[Action[MemoryState]]] =
     state match
       case MemoryState.Playing(phase, currentPlayer, allPlayers, board, mapScore) =>
-
-        val nextPlayer = (currentPlayer + 1) % allPlayers.size
-        if userId != allPlayers(currentPlayer) || phase == PhaseView.Waiting
-          then Failure( NotYourTurnException() )
-        else if !board.map(_._2).contains(CardView.FaceDown)
-          then Success( Seq( Action.Render(MemoryState.Finished(board, mapScore))) )
-        else if phase == PhaseView.GoodMatch
-          then Success( Seq( Action.Render(MemoryState.Playing(PhaseView.SelectingCards, currentPlayer, allPlayers, board, mapScore))) )
-        else if phase == PhaseView.BadMatch
-          then Success( Seq( Action.Render(MemoryState.Playing(PhaseView.Waiting, nextPlayer, allPlayers, board, mapScore))) )
-
+        def updateBoard(cardId: Int, cardView: CardView): Vector[(String, CardView)] = board.updated(cardId, (board(cardId)._1, cardView))
+        if userId != allPlayers(currentPlayer) then Success( Seq( Action.Render(MemoryState.Playing(PhaseView.Waiting, currentPlayer, allPlayers, board, mapScore))))
+        else if !board.map(_._2).contains(CardView.FaceDown) then Success(Seq(Action.Render(MemoryState.Finished(board, mapScore))))
         else
-          event match
-            case MemoryEvent.Toggle(cardId) =>
-              if //board(cardId)._2 == CardView.FaceUp(board(cardId)._1) ||
-                 board(cardId)._2 == CardView.AlreadyMatched(board(cardId)._1)
-              then
-                Failure( IllegalMoveException("Already selected 05 !!!") ) // todo enter here
+        phase match
+          case SelectingCards =>
+            event match
+              case MemoryEvent.Toggle(cardId) =>
+                if board(cardId)._2 == CardView.Selected then
+                  val newBoard = updateBoard(cardId, CardView.FaceDown)//todo down
+                  Success( Seq( Action.Render(MemoryState.Playing(PhaseView.SelectingCards, currentPlayer, allPlayers, newBoard, mapScore)) ) )
+                else
+                  val newBoard = board.updated(cardId, (board(cardId)._1, CardView.Selected))
+                  val newPhase =
+                    if board.map(_._2).contains(CardView.Selected) then PhaseView.CardsSelected
+                    else  PhaseView.SelectingCards
+                  Success( Seq( Action.Render(MemoryState.Playing(newPhase, currentPlayer, allPlayers, newBoard, mapScore))))
+              case MemoryEvent.FlipSelected =>
+                // todo Failure( IllegalMoveException("Select two cards 01 !!!"))
+                Success(Seq(Action.Render(MemoryState.Playing(PhaseView.SelectingCards, currentPlayer, allPlayers, board, mapScore))))
 
-              else if board(cardId)._2 == CardView.Selected then
-                val newBoard = board.updated(cardId, (board(cardId)._1, CardView.FaceDown))
-                Success( Seq( Action.Render(MemoryState.Playing(PhaseView.SelectingCards, currentPlayer, allPlayers, newBoard, mapScore)) ) )
+          case PhaseView.CardsSelected =>
+            event match
+              case MemoryEvent.Toggle(cardId) =>
+                if board(cardId)._2 == CardView.Selected then
+                  val newBoard = updateBoard(cardId, CardView.FaceDown)//todo down
+                  Success(Seq(Action.Render(MemoryState.Playing(PhaseView.SelectingCards, currentPlayer, allPlayers, newBoard, mapScore))))
+                else
+                  Failure( IllegalMoveException("Select only two cards 02 !!!"))
 
-              else if phase == PhaseView.SelectingCards then
-                val newBoard = board.updated(cardId, (board(cardId)._1, CardView.Selected))
+
+              case MemoryEvent.FlipSelected =>
+
+                val pair = board.zipWithIndex.filter(_._1._2 == CardView.Selected)
+                val newBoard = updateBoard(pair.head._2, CardView.FaceUp(pair.head._1._1)).updated(pair.last._2, (pair.last._1._1, CardView.FaceUp(pair.last._1._1)))
                 val newPhase =
-                  if board.map(_._2).contains(CardView.Selected) && board(cardId)._2 != CardView.Selected then  PhaseView.CardsSelected
-                  else  PhaseView.SelectingCards
+                  if pair.head._1._1 == pair.last._1._1 then PhaseView.GoodMatch
+                  else PhaseView.BadMatch
 
-                Success( Seq( Action.Render(MemoryState.Playing(newPhase, currentPlayer, allPlayers, newBoard, mapScore))) )
+                val newScore = if newPhase == PhaseView.GoodMatch then  mapScore.updated(allPlayers(currentPlayer), mapScore(allPlayers(currentPlayer)) ++ pair.map(_._1._1))
+                                else mapScore
 
-              else Failure( IllegalMoveException("Select only two cards 01 !!!") ) // todo enter here
-
-
-
-            case MemoryEvent.FlipSelected =>
-              phase match
-                case PhaseView.SelectingCards =>
-                  Failure( IllegalMoveException("Select two cards 02 !!!") )
-
-                case PhaseView.Waiting =>
-                  Failure( NotYourTurnException() )
-
-                case PhaseView.CardsSelected =>
-
-                  val selectedCards = board.zipWithIndex.filter(_._1._2 == CardView.Selected)
-                  val newBoard = board
-                    .updated(selectedCards.head._2, (selectedCards.head._1._1, CardView.FaceUp(selectedCards.head._1._1)))
-                    .updated(selectedCards.last._2, (selectedCards.last._1._1, CardView.FaceUp(selectedCards.last._1._1)))
-
-                  if selectedCards.head._1 == selectedCards.last._1 then
+                val newPlayer = if newPhase == PhaseView.GoodMatch then currentPlayer else (currentPlayer + 1) % allPlayers.size
 
 
-                    val newScore = mapScore.updated(
-                      allPlayers(currentPlayer),
-                      mapScore(allPlayers(currentPlayer)) ++ selectedCards.map(_._1._1) )
+                Success(Seq(
+                  Action.Render(MemoryState.Playing(phase, currentPlayer, allPlayers, newBoard, mapScore)),
+                  Action.Pause(SHOW_CARDS_PAUSE_MS),
+                  Action.Render(MemoryState.Playing(newPhase, newPlayer, allPlayers, newBoard, newScore))
+                ))
 
-                    Success(Seq(Action.Render(MemoryState.Playing(PhaseView.GoodMatch, currentPlayer, allPlayers, newBoard, newScore))))
+          case PhaseView.GoodMatch =>
+            val pair = board.zipWithIndex.filter(card => card._1._2 == CardView.FaceUp(card._1._1))
+            val WinCard = pair.head._1._1
+            val newBoard = board.map(card => if card._2 == CardView.FaceUp(WinCard) then (card._1, CardView.AlreadyMatched(WinCard)) else card)
 
-                  else
+            Success(Seq(Action.Render(MemoryState.Playing(PhaseView.SelectingCards, currentPlayer, allPlayers, newBoard, mapScore))))
 
-                    Success(Seq(Action.Render(MemoryState.Playing(PhaseView.BadMatch, nextPlayer,  allPlayers, newBoard, mapScore))))
+          case PhaseView.BadMatch =>
+            val newBoard = board.map(card => if card._2 == CardView.FaceUp(card._1) then (card._1, CardView.FaceDown) else card)//todo down
+            Success(Seq(Action.Render(MemoryState.Playing(PhaseView.SelectingCards, currentPlayer, allPlayers, newBoard, mapScore))))
 
       case MemoryState.Finished(board, alreadyMatchedScore) =>
         Success(Seq(Action.Alert("the game is over 03")))
+
+
+
 
 
 
