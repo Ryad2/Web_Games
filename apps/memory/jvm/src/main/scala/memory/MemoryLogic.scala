@@ -75,7 +75,7 @@ object MemoryStateMachine extends cs214.webapp.StateMachine[MemoryEvent, MemoryS
       case MemoryState.Playing(phase, currentPlayer, allPlayers, board, mapScore) =>
         def updateBoard(cardId: Int, cardView: CardView): Vector[(String, CardView)] = board.updated(cardId, (board(cardId)._1, cardView))
         if userId != allPlayers(currentPlayer) then Success( Seq( Action.Render(MemoryState.Playing(PhaseView.Waiting, currentPlayer, allPlayers, board, mapScore))))
-        else if !board.map(_._2).contains(CardView.FaceDown) then Success(Seq(Action.Render(MemoryState.Finished(board, mapScore))))
+        else if board.forall(c => c._2 == CardView.AlreadyMatched(c._1)) then Success(Seq(Action.Render(MemoryState.Finished(board, mapScore))))
         else
         phase match
           case SelectingCards =>
