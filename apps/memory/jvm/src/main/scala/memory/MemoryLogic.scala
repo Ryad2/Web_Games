@@ -82,7 +82,7 @@ object MemoryStateMachine extends cs214.webapp.StateMachine[MemoryEvent, MemoryS
             event match
               case MemoryEvent.Toggle(cardId) =>
                 if board(cardId)._2 == CardView.Selected then
-                  val newBoard = updateBoard(cardId, CardView.FaceDown)//todo down
+                  val newBoard = updateBoard(cardId, CardView.FaceDown) //todo down
                   Success( Seq( Action.Render(MemoryState.Playing(PhaseView.SelectingCards, currentPlayer, allPlayers, newBoard, mapScore)) ) )
                 else
                   val newBoard = board.updated(cardId, (board(cardId)._1, CardView.Selected))
@@ -116,12 +116,23 @@ object MemoryStateMachine extends cs214.webapp.StateMachine[MemoryEvent, MemoryS
                                 else mapScore
 
                 val newPlayer = if newPhase == PhaseView.GoodMatch then currentPlayer else (currentPlayer + 1) % allPlayers.size
+                val endBord =
+                  if newPhase == PhaseView.GoodMatch
+                    then
+                      val pair = newBoard.zipWithIndex.filter(card => card._1._2 == CardView.FaceUp(card._1._1))
+                      val WinCard = pair.head._1._1
+                      newBoard.map(card => if card._2 == CardView.FaceUp(WinCard) then (card._1, CardView.AlreadyMatched(WinCard)) else card)
+
+                  else
+                    newBoard.map(card => if card._2 == CardView.FaceUp(card._1) then (card._1, CardView.FaceDown) else card)
+
+
 
 
                 Success(Seq(
-                  Action.Render(MemoryState.Playing(phase, currentPlayer, allPlayers, newBoard, mapScore)),
+                  Action.Render(MemoryState.Playing(newPhase, currentPlayer, allPlayers, newBoard, mapScore)),
                   Action.Pause(SHOW_CARDS_PAUSE_MS),
-                  Action.Render(MemoryState.Playing(newPhase, newPlayer, allPlayers, newBoard, newScore))
+                  Action.Render(MemoryState.Playing(SelectingCards, newPlayer, allPlayers, endBord, newScore))
                 ))
 
           case PhaseView.GoodMatch =>
