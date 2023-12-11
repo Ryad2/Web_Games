@@ -127,7 +127,14 @@ object MemoryStateMachine extends cs214.webapp.StateMachine[MemoryEvent, MemoryS
                     newBoard.map(card => if card._2 == CardView.FaceUp(card._1) then (card._1, CardView.FaceDown) else card)
 
 
+                if !endBord.map(_._2).contains(CardView.FaceDown) then
+                  Success(Seq(
+                    Action.Render(MemoryState.Playing(newPhase, currentPlayer, allPlayers, newBoard, mapScore)),
+                    Action.Pause(SHOW_CARDS_PAUSE_MS),
+                    Action.Render(MemoryState.Finished(endBord, newScore)
+                  )))
 
+                else
 
                 Success(Seq(
                   Action.Render(MemoryState.Playing(newPhase, currentPlayer, allPlayers, newBoard, mapScore)),
@@ -135,20 +142,9 @@ object MemoryStateMachine extends cs214.webapp.StateMachine[MemoryEvent, MemoryS
                   Action.Render(MemoryState.Playing(SelectingCards, newPlayer, allPlayers, endBord, newScore))
                 ))
 
-          case PhaseView.GoodMatch =>
-            val pair = board.zipWithIndex.filter(card => card._1._2 == CardView.FaceUp(card._1._1))
-            val WinCard = pair.head._1._1
-            val newBoard = board.map(card => if card._2 == CardView.FaceUp(WinCard) then (card._1, CardView.AlreadyMatched(WinCard)) else card)
-
-            Success(Seq(Action.Render(MemoryState.Playing(PhaseView.SelectingCards, currentPlayer, allPlayers, newBoard, mapScore))))
-
-          case PhaseView.BadMatch =>
-            val newBoard = board.map(card => if card._2 == CardView.FaceUp(card._1) then (card._1, CardView.FaceDown) else card)//todo down
-            Success(Seq(Action.Render(MemoryState.Playing(PhaseView.SelectingCards, currentPlayer, allPlayers, newBoard, mapScore))))
 
       case MemoryState.Finished(board, alreadyMatchedScore) =>
-        Success(Seq(Action.Alert("the game is over 03")))
-
+          Failure( IllegalMoveException("Game is over !!!"))
 
 
 

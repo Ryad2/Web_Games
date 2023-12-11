@@ -1,5 +1,4 @@
 package memory
-
 import scala.util.{Failure, Success, Try}
 import cs214.webapp.*
 import cs214.webapp.wires.{BooleanWire, *}
@@ -35,10 +34,17 @@ object MemoryWire extends AppWire[MemoryEvent, MemoryView]:
         case _: Exception => Failure(DecodingException("Invalid JSON"))
       }
 
+
+
+
+
+
+
+
+
   override object viewFormat extends WireFormat[MemoryView]:
 
     override def encode(v: MemoryView): Value =
-
       v.stateView match
         case Playing(phase, currentPlayer, board ) =>
           val table = board.map {
@@ -47,7 +53,6 @@ object MemoryWire extends AppWire[MemoryEvent, MemoryView]:
             case CardView.FaceUp(card) => ("FaceUp", card)
             case CardView.AlreadyMatched(card) => ("AlreadyMatched", card)
           }
-
           val phaseString = phase match
             case PhaseView.SelectingCards => "SelectingCards"
             case PhaseView.CardsSelected => "CardsSelected"
@@ -66,13 +71,13 @@ object MemoryWire extends AppWire[MemoryEvent, MemoryView]:
         case StateView.Finished(winnerIds) =>
           ujson.Obj(
             "type" -> BooleanWire.encode(false),
-            "winnerIds" -> SetWire(StringWire).encode(winnerIds)
+            "winnerIds" -> SetWire(StringWire).encode(winnerIds),
+            "matchedCards" -> MapWire(StringWire, SeqWire(StringWire)).encode(v.alreadyMatched)
           )
 
 
 
     override def decode(js: Value): Try[MemoryView] =
-      val matchedCards = MapWire(StringWire, SeqWire(StringWire)).decode(js("matchedCards")).get
 
       if BooleanWire.decode(js("type")).get then
         val currentPlayer = StringWire.decode(js("player")).get
@@ -90,11 +95,8 @@ object MemoryWire extends AppWire[MemoryEvent, MemoryView]:
           case "GoodMatch" => PhaseView.GoodMatch
           case "BadMatch" => PhaseView.BadMatch
 
-        Success(MemoryView(StateView.Playing(phase, currentPlayer, boardView), matchedCards))
+        Success(MemoryView(StateView.Playing(phase, currentPlayer, boardView), MapWire(StringWire, SeqWire(StringWire)).decode(js("matchedCards")).get))
 
       else
         val winnerIds = SetWire(StringWire).decode(js("winnerIds")).get
-        Success(MemoryView(StateView.Finished(winnerIds), matchedCards))
-
-
-
+        Success(MemoryView(StateView.Finished(winnerIds), MapWire(StringWire, SeqWire(StringWire)).decode(js("matchedCards")).get))
